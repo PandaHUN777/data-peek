@@ -124,4 +124,47 @@ describe('batchInsert parameter limits', () => {
     expect(calls.every((call) => call.params.length <= 2100)).toBe(true)
     expect(calls.every((call) => (call.sql.match(/\), \(/g)?.length ?? 0) + 1 <= 1000)).toBe(true)
   })
+
+  it('reports progress where totalBatches matches the clamped batch count', async () => {
+    const progressCalls: Array<{
+      inserted: number
+      total: number
+      batch: number
+      totalBatches: number
+    }> = []
+    const columns = Array.from({ length: 20 }, (_, index) => `c${index}`)
+    const rows = Array.from({ length: 5000 }, (_, rowIndex) =>
+      columns.map((_, columnIndex) => rowIndex + columnIndex)
+    )
+    const adapter = {
+      dbType: 'mssql',
+      execute: vi.fn(async () => ({ rowCount: null }))
+    } as unknown as DatabaseAdapter
+
+    await batchInsert(
+      adapter,
+      config,
+      rows,
+      makeOptions(columns),
+      500,
+      (inserted, total, batch, totalBatches) => {
+        progressCalls.push({ inserted, total, batch, totalBatches })
+      }
+    )
+
+    expect(progressCalls).toHaveLength(48)
+    expect(progressCalls[0]).toEqual({
+      inserted: 105,
+      total: 5000,
+      batch: 1,
+      totalBatches: 48
+    })
+    expect(progressCalls[progressCalls.length - 1]).toEqual({
+      inserted: 5000,
+      total: 5000,
+      batch: 48,
+      totalBatches: 48
+    })
+    expect(progressCalls.every((p) => p.totalBatches === 48)).toBe(true)
+  })
 })

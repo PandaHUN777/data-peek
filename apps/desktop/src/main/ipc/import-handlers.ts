@@ -6,7 +6,12 @@ import type {
   CsvImportResult
 } from '@shared/index'
 import { getAdapter } from '../db-adapter'
-import { batchInsert, requestCancelBatchInsert, resetCancelBatchInsert } from '../batch-insert'
+import {
+  batchInsert,
+  effectiveBatchSize,
+  requestCancelBatchInsert,
+  resetCancelBatchInsert
+} from '../batch-insert'
 import { createLogger } from '../lib/logger'
 import { quoteIdentifier } from '../sql-utils'
 
@@ -102,7 +107,11 @@ export function registerImportHandlers(): void {
         const mappedRows = rows.map((row) => columnIndexes.map((idx) => row[idx]))
 
         const batchSize = request.options.batchSize || 500
-        const totalBatches = Math.ceil(mappedRows.length / batchSize)
+        const effectiveSize =
+          mappedColumns.length > 0
+            ? effectiveBatchSize(dbType, mappedColumns.length, batchSize)
+            : batchSize
+        const totalBatches = Math.ceil(mappedRows.length / effectiveSize)
 
         sendProgress({
           phase: 'importing',
