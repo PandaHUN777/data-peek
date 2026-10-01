@@ -18,6 +18,12 @@ data-peek is optimized for PostgreSQL with full feature support.
 postgresql://[user]:[password]@[host]:[port]/[database]?sslmode=[mode]
 ```
 
+### Default Schema (`search_path`)
+
+The optional **Default Schema** setting in the connection form sets PostgreSQL's `search_path` for unqualified table names. Enter one schema, or a comma-separated list to define a search order. The first schema is the effective default; later schemas are fallbacks. For example, `app, public` searches `app` before `public`.
+
+When the first configured schema is available, the sidebar focuses it after the schema list loads. Leave the setting empty to use the server's default `search_path`.
+
 ### SSL Modes
 
 | Mode          | Description                     |
