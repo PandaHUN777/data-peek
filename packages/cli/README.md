@@ -7,24 +7,41 @@ npx data-peek doctor postgres://user:pass@localhost:5432/app
 ```
 
 ```
-data-peek doctor  app @ localhost:5432
+data-peek doctor · app @ localhost:5432 · PostgreSQL 16.4 · 8 checks in 31 ms
 
-✖ critical  public.idx_orders_email is invalid
-            Invalid indexes are ignored by the planner. Drop and recreate with CREATE INDEX CONCURRENTLY.
-            DROP INDEX "public"."idx_orders_email";
+✖ 1 invalid index
+  The planner ignores these. Drop, then rebuild with CREATE INDEX CONCURRENTLY.
 
-▲ warning   public.payments(invoice_id) is a FK without a supporting index
-            Deletes on the parent table and joins over this foreign key scan the whole child table. Add a matching index.
-            CREATE INDEX "idx_payments_invoice_id" ON "public"."payments" ("invoice_id");
+  idx_orders_email  on orders
+    DROP INDEX "public"."idx_orders_email";
+    -- Then rebuild with: CREATE INDEX CONCURRENTLY ...
 
-● info      public.events is 41.2% dead tuples
-            Consider running VACUUM on this table.
-            VACUUM (ANALYZE, VERBOSE) "public"."events";
+▲ 2 foreign keys without a supporting index
+  Deletes on the parent and joins over the key scan the whole child table.
 
-3 findings (1 critical, 1 warning, 1 info) · ran in 31 ms
+  payments(invoice_id)
+    CREATE INDEX "idx_payments_invoice_id" ON "public"."payments" ("invoice_id");
+  memberships(invited_by)
+    CREATE INDEX "idx_memberships_invited_by" ON "public"."memberships" ("invited_by");
+
+● 1 bloated table
+  Over a fifth of the rows are dead tuples. VACUUM reclaims them.
+
+  events  41.2% dead · 380 MB
+    VACUUM (ANALYZE, VERBOSE) "public"."events";
+
+● 3 nullable foreign keys
+  Fine when NULL means "no reference". Otherwise add NOT NULL to keep out orphans.
+
+  memberships(invited_by), projects(created_by), events(user_id)
+
+✔ clean  primary keys, duplicate indexes, unused indexes, vacuum
+
+1 critical · 2 warnings · 4 info · 7 findings
+Fix with a click: open app in data-peek → https://datapeek.dev
 ```
 
-Every finding comes with the SQL that fixes it.
+Grouped by check, most severe first. The reason is said once per group, every finding carries the SQL that fixes it, and the checks that passed are named too.
 
 ## Checks
 

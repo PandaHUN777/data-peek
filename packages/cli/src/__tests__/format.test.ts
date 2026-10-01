@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { SchemaIntelReport } from '@shared/index'
-import { atOrAbove, countBySeverity, exitCodeFor, formatReport, PLAIN } from '../format'
+import { ALL_CHECK_IDS } from '../args'
+import {
+  atOrAbove,
+  countBySeverity,
+  entityLabel,
+  exitCodeFor,
+  formatReport,
+  PLAIN,
+  wrap
+} from '../format'
 
 const report: SchemaIntelReport = {
   findings: [
@@ -8,78 +17,138 @@ const report: SchemaIntelReport = {
       checkId: 'unused_indexes',
       severity: 'info',
       title: 'public.idx_orders_old (14 MB) has never been used',
-      detail: 'No reads have hit this index since the stats were reset.',
+      entity: { schema: 'public', name: 'idx_orders_old', kind: 'index' },
+      metadata: { table: 'orders', sizeBytes: 14 * 1024 * 1024 },
       suggestedSql: 'DROP INDEX "public"."idx_orders_old";'
     },
     {
       checkId: 'invalid_indexes',
       severity: 'critical',
       title: 'public.idx_broken is invalid',
+      entity: { schema: 'public', name: 'idx_broken', kind: 'index' },
+      metadata: { table: 'orders' },
       suggestedSql: 'DROP INDEX "public"."idx_broken";\n-- Then rebuild'
     },
     {
       checkId: 'missing_fk_indexes',
       severity: 'warning',
-      title: 'public.orders(customer_id) is a FK without a supporting index'
-    }
-  ],
-  skipped: [
+      title: 'public.orders(customer_id) is a FK without a supporting index',
+      entity: { schema: 'public', name: 'orders', kind: 'foreign_key' },
+      metadata: { columns: ['customer_id'] },
+      suggestedSql: 'CREATE INDEX "idx_orders_customer_id" ON "public"."orders" ("customer_id");'
+    },
     {
-      checkId: 'bloated_tables',
-      reason: 'permission denied for pg_stat_user_tables'
+      checkId: 'nullable_fks',
+      severity: 'info',
+      title: 'public.orders(customer_id) is a nullable foreign key',
+      entity: { schema: 'public', name: 'orders', kind: 'foreign_key' },
+      metadata: { columns: ['customer_id'] }
+    },
+    {
+      checkId: 'nullable_fks',
+      severity: 'info',
+      title: 'billing.invoices(payer_id) is a nullable foreign key',
+      entity: { schema: 'billing', name: 'invoices', kind: 'foreign_key' },
+      metadata: { columns: ['payer_id'] }
     }
   ],
+  skipped: [{ checkId: 'bloated_tables', reason: 'permission denied for pg_stat_user_tables' }],
   durationMs: 42,
   ranAt: 0
 }
 
-const ctx = { database: 'acme', host: 'localhost:5432', palette: PLAIN }
+const ctx = {
+  database: 'acme',
+  host: 'localhost:5432',
+  palette: PLAIN,
+  ran: ALL_CHECK_IDS,
+  serverVersion: 'PostgreSQL 16.4',
+  width: 80
+}
 
 describe('formatReport', () => {
-  it('orders findings most severe first', () => {
-    const out = formatReport(report, ctx)
-    const critical = out.indexOf('idx_broken')
-    const warning = out.indexOf('orders(customer_id)')
-    const info = out.indexOf('idx_orders_old')
+  const out = formatReport(report, ctx)
+
+  it('leads with the target, version, and check count on one line', () => {
+    expect(out.split('\n')[0]).toBe(
+      'data-peek doctor · acme @ localhost:5432 · PostgreSQL 16.4 · 8 checks in 42 ms'
+    )
+  })
+
+  it('groups by check, most severe first, and says the why once per group', () => {
+    const critical = out.indexOf('1 invalid index')
+    const warning = out.indexOf('1 foreign key without a supporting index')
+    const info = out.indexOf('1 index never read')
+    const nullable = out.indexOf('2 nullable foreign keys')
     expect(critical).toBeGreaterThan(-1)
     expect(critical).toBeLessThan(warning)
     expect(warning).toBeLessThan(info)
+    expect(info).toBeLessThan(nullable)
+    expect(out.match(/Fine when NULL means/g)).toHaveLength(1)
   })
 
-  it('prints suggested SQL and multi-line SQL stays indented', () => {
-    const out = formatReport(report, ctx)
-    expect(out).toContain('DROP INDEX "public"."idx_orders_old";')
-    expect(out).toContain('            -- Then rebuild')
+  it('lists entities densely when a group has no SQL', () => {
+    expect(out).toContain('  orders(customer_id), billing.invoices(payer_id)')
   })
 
-  it('lists skipped checks with their reason', () => {
-    expect(formatReport(report, ctx)).toContain('skipped bloated_tables: permission denied')
+  it('drops the public schema prefix and keeps others', () => {
+    expect(out).not.toContain('public.orders')
+    expect(out).toContain('billing.invoices')
   })
 
-  it('summarises counts', () => {
-    expect(formatReport(report, ctx)).toContain('3 findings (1 critical, 1 warning, 1 info)')
+  it('prints suggested SQL under its entity, multi-line SQL kept', () => {
+    expect(out).toContain(
+      '  idx_broken  on orders\n    DROP INDEX "public"."idx_broken";\n    -- Then rebuild'
+    )
+    expect(out).toContain('  idx_orders_old  14 MB on orders')
   })
 
-  it('celebrates an empty report', () => {
-    const out = formatReport({ findings: [], skipped: [], durationMs: 5, ranAt: 0 }, ctx)
-    expect(out).toContain('No findings')
-    expect(out).toContain('0 findings')
+  it('names the clean checks and the skipped ones', () => {
+    expect(out).toContain('✔ clean  primary keys, duplicate indexes, vacuum')
+    expect(out).toContain('– skipped  bloat: permission denied')
+  })
+
+  it('summarises counts and points at the app', () => {
+    expect(out).toContain('1 critical · 1 warning · 3 info · 5 findings')
+    expect(out).toContain('open acme in data-peek')
+  })
+
+  it('celebrates an empty report and still names the clean checks', () => {
+    const clean = formatReport({ findings: [], skipped: [], durationMs: 5, ranAt: 0 }, ctx)
+    expect(clean).toContain('No findings')
+    expect(clean).toContain('No findings. primary keys, FK indexes')
+    expect(clean).not.toContain('✔ clean ')
+    expect(clean).not.toContain('datapeek.dev')
   })
 })
 
-describe('severity helpers', () => {
-  it('counts by severity', () => {
-    expect(countBySeverity(report.findings)).toEqual({
-      critical: 1,
-      warning: 1,
-      info: 1
-    })
+describe('entityLabel', () => {
+  it('shows the one number that matters per check', () => {
+    expect(
+      entityLabel({
+        checkId: 'bloated_tables',
+        severity: 'info',
+        title: '',
+        entity: { schema: 'public', name: 'churn', kind: 'table' },
+        metadata: { deadPct: 66.67, sizePretty: '5 MB' }
+      })
+    ).toEqual({ name: 'churn', note: '66.67% dead · 5 MB' })
+    expect(
+      entityLabel({
+        checkId: 'tables_without_pk',
+        severity: 'warning',
+        title: '',
+        entity: { schema: 'public', name: 'audit_events', kind: 'table' },
+        metadata: { estimatedRows: 1_250_000 }
+      })
+    ).toEqual({ name: 'audit_events', note: '~1.3M rows' })
   })
+})
 
-  it('compares thresholds', () => {
-    expect(atOrAbove('critical', 'warning')).toBe(true)
-    expect(atOrAbove('warning', 'warning')).toBe(true)
-    expect(atOrAbove('info', 'warning')).toBe(false)
+describe('wrap', () => {
+  it('wraps at the width with the indent counted', () => {
+    const lines = wrap('one two three four five six', 14, '  ')
+    expect(lines).toEqual(['  one two', '  three four', '  five six'])
   })
 })
 
@@ -103,5 +172,17 @@ describe('exitCodeFor', () => {
 
   it('is 0 when gating, clean, and nothing skipped', () => {
     expect(exitCodeFor({ findings: [finding], skipped: [] }, 'warning')).toBe(0)
+  })
+})
+
+describe('severity helpers', () => {
+  it('counts by severity', () => {
+    expect(countBySeverity(report.findings)).toEqual({ critical: 1, warning: 1, info: 3 })
+  })
+
+  it('compares thresholds', () => {
+    expect(atOrAbove('critical', 'warning')).toBe(true)
+    expect(atOrAbove('warning', 'warning')).toBe(true)
+    expect(atOrAbove('info', 'warning')).toBe(false)
   })
 })

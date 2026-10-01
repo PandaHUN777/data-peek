@@ -1,7 +1,7 @@
 import pg from 'pg'
 import pc from 'picocolors'
 import { runPostgresSchemaIntel } from '@shared/schema-intel/postgres'
-import type { DoctorOptions } from './args'
+import { ALL_CHECK_IDS, type DoctorOptions } from './args'
 import { exitCodeFor, formatReport, PLAIN, type Palette } from './format'
 
 export interface DoctorResult {
@@ -99,12 +99,19 @@ export async function runDoctor(options: DoctorOptions): Promise<DoctorResult> {
   }
 
   try {
+    const serverVersion = await client
+      .query<{ server_version: string }>('SHOW server_version')
+      .then((r) => `PostgreSQL ${r.rows[0]?.server_version ?? '?'}`)
+      .catch(() => undefined)
     const report = await runPostgresSchemaIntel(client, options.checks)
     const stdout = options.json
       ? JSON.stringify(report, null, 2)
       : formatReport(report, {
           ...describeTarget(options.connectionString),
-          palette
+          palette,
+          ran: options.checks ?? ALL_CHECK_IDS,
+          serverVersion,
+          width: process.stdout.columns
         })
 
     const exitCode = exitCodeFor(report, options.failOn)
