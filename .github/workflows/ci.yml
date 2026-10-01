@@ -71,3 +71,11 @@ jobs:
 
       - name: Typecheck web
         run: pnpm --filter @data-peek/web typecheck
+
+      # The `data-peek` npm package (npx data-peek doctor). Its checks are
+      # bundled from packages/shared, so a change there is verified here too.
+      - name: Test, typecheck, and build CLI
+        run: |
+          pnpm --filter data-peek test
+          pnpm --filter data-peek typecheck
+          pnpm --filter data-peek build

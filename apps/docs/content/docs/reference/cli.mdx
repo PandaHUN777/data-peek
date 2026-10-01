@@ -1,0 +1,73 @@
+---
+title: CLI (data-peek doctor)
+description: Run data-peek's Postgres schema checks from the terminal with npx, no install required
+---
+
+# CLI: `npx data-peek doctor`
+
+The `data-peek` npm package runs the same schema checks as Schema Intel in the app, from a terminal, against any Postgres database you can reach.
+
+```bash
+npx data-peek doctor postgres://user:pass@localhost:5432/app
+```
+
+With no connection string it reads `DATABASE_URL`.
+
+```
+data-peek doctor  app @ localhost:5432
+
+▲ warning   public.payments(invoice_id) is a FK without a supporting index
+            Deletes on the parent table and joins over this foreign key scan the whole child table. Add a matching index.
+            CREATE INDEX "idx_payments_invoice_id" ON "public"."payments" ("invoice_id");
+
+● info      public.events is 41.2% dead tuples
+            Consider running VACUUM on this table.
+            VACUUM (ANALYZE, VERBOSE) "public"."events";
+
+2 findings (1 warning, 1 info) · ran in 31 ms
+```
+
+Findings are grouped most severe first. Each one carries the SQL that fixes it.
+
+## Checks
+
+| Check                | What it finds                                                               | Severity |
+| -------------------- | --------------------------------------------------------------------------- | -------- |
+| `tables_without_pk`  | Tables with no primary key                                                  | warning  |
+| `missing_fk_indexes` | Foreign keys whose columns are not the leading columns of any index         | warning  |
+| `duplicate_indexes`  | Indexes with identical column lists, operator classes, and predicates       | warning  |
+| `unused_indexes`     | Indexes over 1 MB with `idx_scan = 0` since the last statistics reset       | info     |
+| `invalid_indexes`    | Indexes left invalid by a failed `CREATE INDEX CONCURRENTLY`                | critical |
+| `bloated_tables`     | Tables with over 20 % dead tuples, estimated from `n_dead_tup`              | info     |
+| `never_vacuumed`     | Tables over 1,000 rows with no vacuum or analyze on record                  | info     |
+| `nullable_fks`       | Foreign key columns that allow `NULL`                                       | info     |
+
+Every check is a read-only query against the system catalogs. No extensions are needed, one connection is opened and closed, and nothing leaves your machine.
+
+## Options
+
+| Flag                 | Effect                                                                      |
+| -------------------- | --------------------------------------------------------------------------- |
+| `--checks <a,b,c>`   | Run only the listed checks                                                  |
+| `--json`             | Print the raw report as JSON                                                |
+| `--fail-on <level>`  | Exit with code 1 if any finding is at or above `info`, `warning`, or `critical` |
+| `--no-color`         | Plain output. `NO_COLOR` in the environment does the same                   |
+
+Exit codes: `0` clean or below the threshold, `1` findings at or above `--fail-on`, `2` usage or connection error.
+
+## As a CI gate
+
+Fail a build when a migration drops a foreign key's index or leaves an index invalid:
+
+```yaml
+- name: Schema checks
+  run: npx data-peek doctor "$DATABASE_URL" --fail-on warning
+```
+
+## Database support
+
+Postgres only for now. MySQL and SQL Server connection strings print a clear message rather than a partial answer. The desktop app runs schema checks on all three.
+
+## Same checks as the app
+
+The CLI and the desktop app import the same check file from the shared package, so they can never disagree about what a finding means. Open the connection in data-peek and the same findings are in Schema Intel, with the fix one click away.

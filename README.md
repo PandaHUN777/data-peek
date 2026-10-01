@@ -153,6 +153,17 @@ irm https://install.cat/Rohithgilla12/data-peek | iex
 
 The PowerShell installer downloads the latest `setup.exe` release and runs it for you.
 
+### Terminal: `npx data-peek doctor`
+
+No install needed. Eight Postgres schema checks from the terminal, each finding with the SQL that fixes it:
+
+```bash
+npx data-peek doctor postgres://user:pass@localhost:5432/app
+npx data-peek doctor "$DATABASE_URL" --fail-on warning   # as a CI gate
+```
+
+Tables without a primary key, foreign keys without an index, duplicate, unused, and invalid indexes, bloat, never-vacuumed tables, and nullable FKs. Same queries as Schema Intel in the app. See [`packages/cli`](packages/cli/README.md).
+
 ### Alternative Install Methods
 
 #### macOS: Homebrew
