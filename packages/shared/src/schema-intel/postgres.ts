@@ -174,11 +174,14 @@ async function checkDuplicateIndexes(
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema'
       AND idx.indisvalid
-    -- Two indexes are duplicates when everything but the name matches:
-    -- columns, operator classes, sort options, uniqueness, predicate, and
-    -- expressions. pg_get_indexdef includes the name, so it can't be the key.
-    GROUP BY n.nspname, c.relname, idx.indrelid, idx.indkey, idx.indclass, idx.indoption,
-      idx.indisunique, idx.indpred, idx.indexprs
+    -- Two indexes are duplicates when everything but the name matches. The
+    -- definition from pg_get_indexdef carries all of it (columns, operator
+    -- classes, sort options, collation, NULLS NOT DISTINCT, INCLUDE, storage
+    -- parameters, predicate, expressions) on every supported version, so group
+    -- on the definition from " ON " onwards, which drops the name, plus
+    -- uniqueness, which sits before it.
+    GROUP BY n.nspname, c.relname, idx.indrelid, idx.indisunique,
+      substr(pg_get_indexdef(idx.indexrelid), position(' ON ' in pg_get_indexdef(idx.indexrelid)))
     HAVING count(*) > 1
     ORDER BY n.nspname, c.relname
     `,

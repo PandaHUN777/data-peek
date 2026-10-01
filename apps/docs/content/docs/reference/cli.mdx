@@ -53,7 +53,7 @@ Every check is a read-only query against the system catalogs. No extensions are 
 | `--fail-on <level>`  | Exit with code 1 if any finding is at or above `info`, `warning`, or `critical` |
 | `--no-color`         | Plain output. `NO_COLOR` in the environment does the same                   |
 
-Exit codes: `0` clean or below the threshold, `1` findings at or above `--fail-on`, `2` usage or connection error.
+Exit codes: `0` clean or below the threshold, `1` findings at or above `--fail-on`, `2` usage or connection error, or a check that could not run while `--fail-on` is set. A gate that passes because the checks never ran is not a gate.
 
 ## As a CI gate
 

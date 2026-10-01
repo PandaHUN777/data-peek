@@ -63,7 +63,7 @@ Fail the build when a migration drops a foreign key's index or leaves one invali
   run: npx data-peek doctor "$DATABASE_URL" --fail-on warning
 ```
 
-Exit codes: `0` clean or below threshold, `1` findings at or above `--fail-on`, `2` usage or connection error.
+Exit codes: `0` clean or below threshold, `1` findings at or above `--fail-on`, `2` usage or connection error, or a check that could not run while `--fail-on` is set. A gate that passes because the checks never ran is not a gate.
 
 ## Postgres only, for now
 

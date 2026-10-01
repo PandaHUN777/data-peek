@@ -1,42 +1,38 @@
-import type { SchemaIntelCheckId, SchemaIntelSeverity } from "@shared/index";
+import type { SchemaIntelCheckId, SchemaIntelSeverity } from '@shared/index'
 
 export const ALL_CHECK_IDS: readonly SchemaIntelCheckId[] = [
-  "tables_without_pk",
-  "missing_fk_indexes",
-  "duplicate_indexes",
-  "unused_indexes",
-  "invalid_indexes",
-  "bloated_tables",
-  "never_vacuumed",
-  "nullable_fks",
-];
+  'tables_without_pk',
+  'missing_fk_indexes',
+  'duplicate_indexes',
+  'unused_indexes',
+  'invalid_indexes',
+  'bloated_tables',
+  'never_vacuumed',
+  'nullable_fks'
+]
 
-const SEVERITIES: readonly SchemaIntelSeverity[] = [
-  "info",
-  "warning",
-  "critical",
-];
+const SEVERITIES: readonly SchemaIntelSeverity[] = ['info', 'warning', 'critical']
 
 export interface DoctorOptions {
-  connectionString: string | undefined;
-  checks: SchemaIntelCheckId[] | undefined;
-  json: boolean;
-  failOn: SchemaIntelSeverity | undefined;
-  color: boolean;
+  connectionString: string | undefined
+  checks: SchemaIntelCheckId[] | undefined
+  json: boolean
+  failOn: SchemaIntelSeverity | undefined
+  color: boolean
 }
 
 export type ParsedArgs =
-  | { command: "help" }
-  | { command: "version" }
-  | { command: "doctor"; options: DoctorOptions }
-  | { command: "error"; message: string };
+  | { command: 'help' }
+  | { command: 'version' }
+  | { command: 'doctor'; options: DoctorOptions }
+  | { command: 'error'; message: string }
 
 function isCheckId(value: string): value is SchemaIntelCheckId {
-  return (ALL_CHECK_IDS as readonly string[]).includes(value);
+  return (ALL_CHECK_IDS as readonly string[]).includes(value)
 }
 
 function isSeverity(value: string): value is SchemaIntelSeverity {
-  return (SEVERITIES as readonly string[]).includes(value);
+  return (SEVERITIES as readonly string[]).includes(value)
 }
 
 /**
@@ -46,26 +42,21 @@ function isSeverity(value: string): value is SchemaIntelSeverity {
  */
 export function parseArgs(
   argv: readonly string[],
-  env: { DATABASE_URL?: string } = {},
+  env: { DATABASE_URL?: string } = {}
 ): ParsedArgs {
-  const [command, ...rest] = argv;
+  const [command, ...rest] = argv
 
-  if (
-    !command ||
-    command === "help" ||
-    command === "--help" ||
-    command === "-h"
-  ) {
-    return { command: "help" };
+  if (!command || command === 'help' || command === '--help' || command === '-h') {
+    return { command: 'help' }
   }
-  if (command === "version" || command === "--version" || command === "-v") {
-    return { command: "version" };
+  if (command === 'version' || command === '--version' || command === '-v') {
+    return { command: 'version' }
   }
-  if (command !== "doctor") {
+  if (command !== 'doctor') {
     return {
-      command: "error",
-      message: `Unknown command "${command}". Try: data-peek doctor`,
-    };
+      command: 'error',
+      message: `Unknown command "${command}". Try: data-peek doctor`
+    }
   }
 
   const options: DoctorOptions = {
@@ -73,82 +64,88 @@ export function parseArgs(
     checks: undefined,
     json: false,
     failOn: undefined,
-    color: true,
-  };
+    color: true
+  }
 
   for (let i = 0; i < rest.length; i++) {
-    const arg = rest[i];
+    const arg = rest[i]
     const [flag, inlineValue] =
-      arg.startsWith("--") && arg.includes("=") ? arg.split(/=(.*)/s) : [arg];
+      arg.startsWith('--') && arg.includes('=') ? arg.split(/=(.*)/s) : [arg]
     const takeValue = (): string | undefined => {
-      if (inlineValue !== undefined) return inlineValue;
-      const next = rest[i + 1];
-      if (next === undefined || next.startsWith("-")) return undefined;
-      i++;
-      return next;
-    };
+      if (inlineValue !== undefined) return inlineValue
+      const next = rest[i + 1]
+      if (next === undefined || next.startsWith('-')) return undefined
+      i++
+      return next
+    }
 
     switch (flag) {
-      case "--json":
-        options.json = true;
-        break;
-      case "--no-color":
-        options.color = false;
-        break;
-      case "--checks": {
-        const value = takeValue();
+      case '--json':
+      case '--no-color':
+        if (inlineValue !== undefined)
+          return { command: 'error', message: `${flag} takes no value` }
+        if (flag === '--json') options.json = true
+        else options.color = false
+        break
+      case '--checks': {
+        const value = takeValue()
         if (!value)
           return {
-            command: "error",
-            message: "--checks needs a comma-separated list",
-          };
+            command: 'error',
+            message: '--checks needs a comma-separated list'
+          }
         const ids = value
-          .split(",")
+          .split(',')
           .map((s) => s.trim())
-          .filter(Boolean);
-        const unknown = ids.filter((id) => !isCheckId(id));
+          .filter(Boolean)
+        if (ids.length === 0)
+          return {
+            command: 'error',
+            message: '--checks needs a comma-separated list'
+          }
+        const unknown = ids.filter((id) => !isCheckId(id))
         if (unknown.length) {
           return {
-            command: "error",
-            message: `Unknown check${unknown.length > 1 ? "s" : ""}: ${unknown.join(", ")}\nAvailable: ${ALL_CHECK_IDS.join(", ")}`,
-          };
+            command: 'error',
+            message: `Unknown check${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}\nAvailable: ${ALL_CHECK_IDS.join(', ')}`
+          }
         }
-        options.checks = ids.filter(isCheckId);
-        break;
+        options.checks = ids.filter(isCheckId)
+        break
       }
-      case "--fail-on": {
-        const value = takeValue();
+      case '--fail-on': {
+        const value = takeValue()
         if (!value || !isSeverity(value)) {
           return {
-            command: "error",
-            message: "--fail-on must be one of: info, warning, critical",
-          };
+            command: 'error',
+            message: '--fail-on must be one of: info, warning, critical'
+          }
         }
-        options.failOn = value;
-        break;
+        options.failOn = value
+        break
       }
-      case "--help":
-      case "-h":
-        return { command: "help" };
+      case '--help':
+      case '-h':
+        return { command: 'help' }
       default:
-        if (arg.startsWith("-")) {
-          return { command: "error", message: `Unknown flag "${arg}"` };
+        if (arg.startsWith('-')) {
+          return { command: 'error', message: `Unknown flag "${arg}"` }
         }
         if (options.connectionString) {
           return {
-            command: "error",
-            message: "Only one connection string is accepted",
-          };
+            command: 'error',
+            message: 'Only one connection string is accepted'
+          }
         }
-        options.connectionString = arg;
+        options.connectionString = arg
     }
   }
 
   if (!options.connectionString && env.DATABASE_URL) {
-    options.connectionString = env.DATABASE_URL;
+    options.connectionString = env.DATABASE_URL
   }
 
-  return { command: "doctor", options };
+  return { command: 'doctor', options }
 }
 
 export const HELP = `data-peek — schema checks from the terminal
@@ -177,4 +174,4 @@ Checks
 
 Postgres only for now. Read-only catalog queries, one connection, nothing leaves your machine.
 Open the same connection in data-peek (https://datapeek.dev) to apply fixes with a click.
-`;
+`
