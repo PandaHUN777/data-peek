@@ -28,7 +28,32 @@ function buildTableRef(schema: string, table: string, dbType: string): string {
   return quoted
 }
 
-function buildPlaceholders(dbType: string, colCount: number, rowIndex: number): string {
+const INSERT_LIMITS: Record<string, { maxParameters: number; maxRows?: number }> = {
+  postgresql: { maxParameters: 65_535 },
+  mysql: { maxParameters: 65_535 },
+  // Keep compatibility with SQLite builds that retain the pre-3.32 default.
+  sqlite: { maxParameters: 999 },
+  mssql: { maxParameters: 2_100, maxRows: 1_000 }
+}
+
+export function effectiveBatchSize(dbType: string, columnCount: number, requested: number): number {
+  if (!Number.isSafeInteger(columnCount) || columnCount < 1) {
+    throw new RangeError('columnCount must be a positive integer')
+  }
+
+  const requestedSize = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1
+  const limits = INSERT_LIMITS[dbType]
+  if (!limits) return requestedSize
+
+  const parameterLimitedSize = Math.floor(limits.maxParameters / columnCount)
+  if (parameterLimitedSize < 1) {
+    throw new RangeError(`A ${dbType} row with ${columnCount} columns exceeds its parameter limit`)
+  }
+
+  return Math.min(requestedSize, parameterLimitedSize, limits.maxRows ?? Infinity)
+}
+
+export function buildPlaceholders(dbType: string, colCount: number, rowIndex: number): string {
   if (dbType === 'postgresql') {
     const base = rowIndex * colCount
     return Array.from({ length: colCount }, (_, i) => `$${base + i + 1}`).join(', ')
@@ -40,7 +65,7 @@ function buildPlaceholders(dbType: string, colCount: number, rowIndex: number): 
   return Array.from({ length: colCount }, () => '?').join(', ')
 }
 
-function buildInsertSql(
+export function buildInsertSql(
   dbType: string,
   tableRef: string,
   columns: string[],
@@ -124,13 +149,14 @@ export async function batchInsert(
   const dbType = adapter.dbType
   const tableRef = buildTableRef(options.schema, options.table, dbType)
   const primaryKeyColumns = options.primaryKeyColumns ?? []
+  const effectiveSize = effectiveBatchSize(dbType, options.columns.length, batchSize)
 
-  const totalBatches = Math.ceil(rows.length / batchSize)
+  const totalBatches = Math.ceil(rows.length / effectiveSize)
 
   for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
     if (cancelRequested) break
 
-    const batchRows = rows.slice(batchIdx * batchSize, (batchIdx + 1) * batchSize)
+    const batchRows = rows.slice(batchIdx * effectiveSize, (batchIdx + 1) * effectiveSize)
     const params: unknown[] = batchRows.flat()
 
     const sql = buildInsertSql(
