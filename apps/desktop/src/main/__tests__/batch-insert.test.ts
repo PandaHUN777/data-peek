@@ -26,7 +26,7 @@ beforeEach(() => {
 
 describe('effectiveBatchSize', () => {
   it.each([
-    ['mssql', 20, 500, 105],
+    ['mssql', 20, 500, 104],
     ['mssql', 2, 2000, 1000],
     ['postgresql', 20, 5000, 3276],
     ['mysql', 1, 70000, 65535],
@@ -119,9 +119,9 @@ describe('batchInsert parameter limits', () => {
       0
     )
     expect(result.rowsInserted).toBe(5000)
-    expect(calls).toHaveLength(Math.ceil(5000 / 105))
+    expect(calls).toHaveLength(Math.ceil(5000 / 104))
     expect(insertedRows).toBe(5000)
-    expect(calls.every((call) => call.params.length <= 2100)).toBe(true)
+    expect(calls.every((call) => call.params.length <= 2098)).toBe(true)
     expect(calls.every((call) => (call.sql.match(/\), \(/g)?.length ?? 0) + 1 <= 1000)).toBe(true)
   })
 
@@ -152,19 +152,19 @@ describe('batchInsert parameter limits', () => {
       }
     )
 
-    expect(progressCalls).toHaveLength(48)
+    expect(progressCalls).toHaveLength(49)
     expect(progressCalls[0]).toEqual({
-      inserted: 105,
+      inserted: 104,
       total: 5000,
       batch: 1,
-      totalBatches: 48
+      totalBatches: 49
     })
     expect(progressCalls[progressCalls.length - 1]).toEqual({
       inserted: 5000,
       total: 5000,
-      batch: 48,
-      totalBatches: 48
+      batch: 49,
+      totalBatches: 49
     })
-    expect(progressCalls.every((p) => p.totalBatches === 48)).toBe(true)
+    expect(progressCalls.every((p) => p.totalBatches === 49)).toBe(true)
   })
 })

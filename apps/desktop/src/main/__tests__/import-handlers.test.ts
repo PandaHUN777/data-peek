@@ -75,32 +75,32 @@ describe('registerImportHandlers progress totals', () => {
     expect(result.success).toBe(true)
     expect(result.data?.rowsImported).toBe(5000)
 
-    // Clamped effective batch size: floor(2100 / 20) = 105 rows
-    // Total batches: ceil(5000 / 105) = 48 batches
+    // Clamped effective batch size: floor(2098 / 20) = 104 rows
+    // Total batches: ceil(5000 / 104) = 49 batches
     const importingUpdates = progressUpdates.filter((p) => p.phase === 'importing')
     expect(importingUpdates.length).toBeGreaterThanOrEqual(1)
 
-    // Initial importing event must report totalBatches = 48 (not unclamped 10)
+    // Initial importing event must report totalBatches = 49 (not unclamped 10)
     expect(importingUpdates[0]).toEqual({
       phase: 'importing',
       rowsImported: 0,
       totalRows: 5000,
       currentBatch: 0,
-      totalBatches: 48
+      totalBatches: 49
     })
 
-    // Completion event must report currentBatch = 48 and totalBatches = 48
+    // Completion event must report currentBatch = 49 and totalBatches = 49
     const completeUpdate = progressUpdates.find((p) => p.phase === 'complete')
     expect(completeUpdate).toBeDefined()
     expect(completeUpdate).toEqual({
       phase: 'complete',
       rowsImported: 5000,
       totalRows: 5000,
-      currentBatch: 48,
-      totalBatches: 48
+      currentBatch: 49,
+      totalBatches: 49
     })
 
-    // All progress updates in importing phase must agree on totalBatches = 48
-    expect(importingUpdates.every((p) => p.totalBatches === 48)).toBe(true)
+    // All progress updates in importing phase must agree on totalBatches = 49
+    expect(importingUpdates.every((p) => p.totalBatches === 49)).toBe(true)
   })
 })

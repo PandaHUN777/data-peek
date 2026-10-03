@@ -33,7 +33,8 @@ const INSERT_LIMITS: Record<string, { maxParameters: number; maxRows?: number }>
   mysql: { maxParameters: 65_535 },
   // Keep compatibility with SQLite builds that retain the pre-3.32 default.
   sqlite: { maxParameters: 999 },
-  mssql: { maxParameters: 2_100, maxRows: 1_000 }
+  // sp_executesql reserves two of SQL Server's 2,100 parameters for @stmt and @params.
+  mssql: { maxParameters: 2_098, maxRows: 1_000 }
 }
 
 export function effectiveBatchSize(dbType: string, columnCount: number, requested: number): number {
